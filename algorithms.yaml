@@ -15,3 +15,17 @@ algorithm_name:
     - "--clock"
     # - "-r 0.5"
     # - "-u 10"
+
+another_algorithm:
+  input_topics:
+    lidar_topic: "/robot1/velodyne_points"
+    imu_topic: "/imu/data"
+  output_topics:
+    - "/odometry"
+    - "/time"
+  launch_commands:
+    - "roslaunch another_algorithm_pkg benchmark.launch"
+  rosbag_args:
+    # - "--clock"
+    # - "-r 0.5"
+    # - "-u 10"

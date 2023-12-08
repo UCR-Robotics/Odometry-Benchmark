@@ -1,0 +1,17 @@
+# YAML configuration for algorithms used in the evaluation
+algorithm_name:
+  input_topics: # topics accepted by this algorithm (to be remapped from dataset topics)
+    lidar_topic: "/velodyne_points"
+    imu_topic: "/unused"  # leave empty if not used (or any other unused topic name)
+  output_topics: # topics to record (as output results from algorithms)
+    - "/odometry"
+    - "/time"
+  launch_commands:  # commands to launch the algorithm, to be run in different terminals/subprocesses
+    - "roslaunch algorithm_pkg benchmark.launch"
+    - "rosrun tf static_transform_publisher 0 0 0 0 0 0 1 map odom 100"
+  cleanup_commands: # optional commands to be run when the sequence playback ends, to clean up things
+    - "cp ~/catkin_ws/src/algorithm_pkg/config/benchmark.yaml $ALG_FOLDER/params.yaml"
+  rosbag_args:      # optional arguments to be passed to rosbag play command
+    - "--clock"
+    # - "-r 0.5"
+    # - "-u 10"

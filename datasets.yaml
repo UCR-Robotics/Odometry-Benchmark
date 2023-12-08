@@ -1,0 +1,15 @@
+# YAML configuration for datasets used in the evaluation
+citrus-farm-dataset:
+  lidar_topic: "/velodyne_points"     # lidar topic provided by this dataset
+  imu_topic: "/microstrain/imu/data"  # imu topic provided by this dataset
+  data_folder: "/home/user_name/Datasets/CitrusFarm"
+  ground_truth_folder: "/home/user_name/Datasets/CitrusFarm/ground_truth"
+  ground_truth_type: bag  # file extension: bag, txt or csv
+  sequences:
+    - "01_13B_Jackal"
+    - "02_13B_Jackal"
+    - "03_13B_Jackal"
+    - "04_13D_Jackal"
+    - "05_13D_Jackal"
+    - "06_14B_Jackal"
+    - "07_14B_Jackal"

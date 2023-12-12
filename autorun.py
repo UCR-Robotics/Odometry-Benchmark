@@ -113,8 +113,8 @@ class AutoRunner:
       rosbag_path = f"{dataset['data_folder']}/{sequence}.bag"
     else:
       rosbag_path = f"{dataset['data_folder']}/{sequence}/*.bag"
-    remap_lidar_topic = f"{algorithm['input_topics']['lidar_topic']}:={dataset['lidar_topic']}"
-    remap_imu_topic = f"{algorithm['input_topics']['imu_topic']}:={dataset['imu_topic']}"
+    remap_lidar_topic = f"{dataset['lidar_topic']}:={algorithm['input_topics']['lidar_topic']}"
+    remap_imu_topic = f"{dataset['imu_topic']}:={algorithm['input_topics']['imu_topic']}"
     more_args = f"-d {self.waiting_time} {' '.join(algorithm.get('rosbag_args') or [])}"
     rosbag_play_cmd = " ".join(["rosbag play", rosbag_path, remap_lidar_topic, remap_imu_topic, more_args])
     rosbag_play_process = self.create_process(rosbag_play_cmd)

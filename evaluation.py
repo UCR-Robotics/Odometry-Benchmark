@@ -30,10 +30,12 @@ class OdometryBenchmark:
     self.algorithms = load_yaml_file(os.path.join(results_folder, 'algorithms.yaml'))
     self.ate_results = {}
     self.rpe_results = {}
+    self.endpoint_results = {}
     for dataset_name, dataset_config in self.datasets.items():
       for sequence_name in dataset_config['sequences']:
         self.ate_results[(dataset_name, sequence_name)] = {}
         self.rpe_results[(dataset_name, sequence_name)] = {}
+        self.endpoint_results[(dataset_name, sequence_name)] = {}
 
   def find_odometry_topic(self, bag_file):
     with rosbag.Bag(bag_file, 'r') as bag:
@@ -107,12 +109,15 @@ class OdometryBenchmark:
           # Compute ATE and save results
           rot, trans, trans_error = compute_ate(est_poses, gt_poses)
           self.ate_results[(dataset_name, sequence_name)][algorithm_name] = np.mean(trans_error)
+          self.endpoint_results[(dataset_name, sequence_name)][algorithm_name] = np.linalg.norm(est_poses[-1][1:4])
           print(f'Processed algorithm {algorithm_name}, dataset {dataset_name}, sequence {sequence_name}')
 
     # Save all results to a CSV file
-    csv_file_path = os.path.join(self.results_folder, 'ate_results.csv')
-    self.save_results_to_csv(csv_file_path, self.ate_results, self.algorithms)
-    print(f"Evaluation completed and results saved to {csv_file_path}")
+    ate_file_path = os.path.join(self.results_folder, 'ate_results.csv')
+    self.save_results_to_csv(ate_file_path, self.ate_results, self.algorithms)
+    endpoint_file_path = os.path.join(self.results_folder, 'endpoint_results.csv')
+    self.save_results_to_csv(endpoint_file_path, self.endpoint_results, self.algorithms)
+    print(f"Evaluation completed and results saved to {self.results_folder}")
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Evaluate odometry results.')

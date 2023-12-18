@@ -7,7 +7,7 @@ import argparse
 import glob
 from nav_msgs.msg import Odometry, Path
 from geometry_msgs.msg import PoseStamped, Pose
-import tf.transformations
+import tf.transformations as tf_trans
 from tools_ate import compute_ate
 
 """
@@ -97,6 +97,19 @@ class OdometryBenchmark:
           return self.read_poses_from_file(gt_file[0])
     raise ValueError(f"Ground truth file not found: folder {gt_folder}.")
 
+  def transform_poses(self, poses, transformation):
+    transformed_poses = []
+    tx, ty, tz, qx, qy, qz, qw = transformation
+    transform_matrix = tf_trans.compose_matrix(translate=[tx, ty, tz], angles=tf_trans.euler_from_quaternion([qx, qy, qz, qw]))
+    for pose in poses:
+      timestamp, px, py, pz, ox, oy, oz, ow = pose
+      pose_matrix = tf_trans.compose_matrix(translate=[px, py, pz], angles=tf_trans.euler_from_quaternion([ox, oy, oz, ow]))
+      transformed_matrix = np.dot(pose_matrix, transform_matrix) # T_world_gt = T_world_pose * T_pose_gt
+      transformed_position = tf_trans.translation_from_matrix(transformed_matrix)
+      transformed_orientation = tf_trans.quaternion_from_matrix(transformed_matrix)
+      transformed_poses.append([timestamp] + list(transformed_position) + list(transformed_orientation))
+    return transformed_poses
+
   def process(self):
     for algorithm_name in self.algorithms.keys():
       for dataset_name, dataset_config in self.datasets.items():
@@ -106,10 +119,14 @@ class OdometryBenchmark:
           est_poses = self.read_poses_from_rosbag(result_bag_file)
           gt_poses = self.get_ground_truth_poses(dataset_name, sequence_name)
 
+          # Save endpoint position
+          self.endpoint_results[(dataset_name, sequence_name)][algorithm_name] = np.linalg.norm(est_poses[-1][1:4])
+
           # Compute ATE and save results
+          if 'ground_truth_extrinsics' in dataset_config: # Apply extrinsic parameters if applicable
+            est_poses = self.transform_poses(est_poses, dataset_config['ground_truth_extrinsics'])
           rot, trans, trans_error = compute_ate(est_poses, gt_poses)
           self.ate_results[(dataset_name, sequence_name)][algorithm_name] = np.mean(trans_error)
-          self.endpoint_results[(dataset_name, sequence_name)][algorithm_name] = np.linalg.norm(est_poses[-1][1:4])
           print(f'Processed algorithm {algorithm_name}, dataset {dataset_name}, sequence {sequence_name}')
 
     # Save all results to a CSV file

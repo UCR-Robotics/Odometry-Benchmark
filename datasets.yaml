@@ -5,6 +5,7 @@ citrus-farm-dataset:
   data_folder: "/home/user_name/Datasets/CitrusFarm"
   ground_truth_folder: "/home/user_name/Datasets/CitrusFarm/ground_truth"
   ground_truth_type: bag  # file extension: bag, txt or csv
+  ground_truth_extrinsics: [-0.22, 0, 0.153, 0, 0, 0, 1]  # x, y, z, qx, qy, qz, qw for T_lidar_gt
   sequences:
     - "01_13B_Jackal"
     - "02_13B_Jackal"

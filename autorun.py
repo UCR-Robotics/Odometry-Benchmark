@@ -1,12 +1,13 @@
 import argparse
 import subprocess
 import yaml
+import csv
 import time
 import psutil
 import os
 import glob
 import rosbag
-from datetime import datetime
+from datetime import datetime, timedelta
 
 def load_yaml_file(file_path):
   with open(file_path, 'r') as file:
@@ -15,6 +16,12 @@ def load_yaml_file(file_path):
 def save_yaml_file(data, file_path):
   with open(file_path, 'w') as file:
     yaml.safe_dump(data, file, default_flow_style=False)
+
+def save_csv_file(csv_header, data, file_path):
+  with open(file_path, mode='w', newline='') as file:
+    writer = csv.writer(file)
+    writer.writerow(csv_header)
+    writer.writerows(data)
 
 class AutoRunner:
   def __init__(self):
@@ -130,14 +137,17 @@ class AutoRunner:
     # Print the estimated running time, while waiting for the rosbag play to finish
     sequence_duration = self.dataset_cache[f"{dataset_name}_{sequence}"]
     begin_time = time.time()
+    cpu_usage = []
     while rosbag_play_process.poll() is None:
       elapsed_time = time.time() - begin_time
       print(f"Estimated running time: {elapsed_time:.2f} / {sequence_duration:.2f} seconds.", end = '\r', flush=True)
+      cpu_usage.append([elapsed_time, psutil.cpu_percent(interval=None)])
       time.sleep(0.1)
 
-    # Update runner cache that this sequence is completed
+    # Update runner cache (to mark this sequence completed) and save cpu usage
     self.runner_cache[f"{algorithm_name}_{dataset_name}_{sequence}"] = True
     save_yaml_file(self.runner_cache, f"{self.results_folder}/.runner_cache.yaml")
+    save_csv_file(['Time Elapsed', 'CPU Usage (%)'], cpu_usage, f"{sequence_folder}/cpu_usage.csv")
 
     # run cleanup commands if any
     if 'cleanup_commands' in algorithm:
@@ -188,7 +198,8 @@ class AutoRunner:
     print(f"Estimating total running time...")
     total_time = self.estimate_total_time(self.datasets_config, self.algorithms_config)
     save_yaml_file(self.dataset_cache, '.dataset_cache.yaml')
-    print(f"Estimated total running time: {total_time:.2f} seconds.")
+    print(f"Estimated total running time: {total_time:.2f} seconds or {total_time/3600.0:.2f} hours.")
+    print(f"Estimated completion time: {(datetime.now() + timedelta(seconds=total_time)).strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Start roscore
     self.roscore_process = self.create_process("roscore")

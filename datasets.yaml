@@ -1,26 +1,19 @@
 # YAML configuration for datasets used in the evaluation
-citrus-farm-dataset:
-  lidar_topic: "/velodyne_points"     # lidar topic provided by this dataset
-  imu_topic: "/microstrain/imu/data"  # imu topic provided by this dataset
-  data_folder: "/home/user_name/Datasets/CitrusFarm"
-  ground_truth_folder: "/home/user_name/Datasets/CitrusFarm/ground_truth"
+blt:
+  lidar_topic: "/os_cloud_node/points"
+  imu_topic: "/os_cloud_node/imu"
+  data_folder: "/media/hteng/ARCS-Drive3/LiDAR_Datasets/BLT/trimmed"
+  ground_truth_folder: "/media/hteng/ARCS-Drive3/LiDAR_Datasets/BLT/ground_truth"
   ground_truth_type: bag  # file extension: bag, txt or csv
-  ground_truth_extrinsics: [-0.22, 0, 0.153, 0, 0, 0, 1]  # x, y, z, qx, qy, qz, qw for T_lidar_gt
   sequences:
-    - "01_13B_Jackal"
-    - "02_13B_Jackal"
-    - "03_13B_Jackal"
-    - "04_13D_Jackal"
-    - "05_13D_Jackal"
-    - "06_14B_Jackal"
-    - "07_14B_Jackal"
+  - "2022-03-23-12-27-15"
+  - "2022-04-06-11-02-34"
+  - "2022-04-20-09-37-20"
+  - "2022-05-06"
+  - "2022-06-01-15-16-04"
+  - "2022-06-08-14-03-03"
+  - "2022-06-22-13-02-08"
+  - "2022-06-29-13-49-55"
+  - "2022-07-13-15-38-32"
+  - "2022-09-15-14-23-20"
 
-another-dataset:
-  lidar_topic: "/velodyne_points"
-  imu_topic: "/imu/data"
-  data_folder: "/home/user_name/Datasets/another-dataset"
-  ground_truth_folder: "/home/user_name/Datasets/another-dataset/ground_truth"
-  ground_truth_type: txt
-  sequences:
-    - "seq_01"
-    - "seq_02"

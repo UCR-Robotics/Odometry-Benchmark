@@ -1,0 +1,267 @@
+#!/usr/bin/python3
+
+import os
+import argparse
+import shutil
+import string
+import json
+import yaml
+import rosbag
+import rospy
+from nav_msgs.msg import Path
+from geometry_msgs.msg import PoseStamped, Pose
+import yaml
+import tf.transformations
+import numpy as np
+
+from rpe import rpe
+from ate import ate
+from utils import path_statistics
+
+def transform_pose(T, pose:Pose)->Pose:
+    T2=tf.transformations.quaternion_matrix([pose.orientation.x,pose.orientation.y,pose.orientation.z,pose.orientation.w])
+    T2[0:3,3]=[pose.position.x, pose.position.y, pose.position.z]
+    
+    result=T2@T
+    result[0:3,0:3]=result[0:3,0:3]@T[0:3,0:3].T
+    result_p=result[0:3,3]
+    result_q=tf.transformations.quaternion_from_matrix(result)
+    ret=Pose()
+    ret.position.x=result_p[0]
+    ret.position.y=result_p[1]
+    ret.position.z=result_p[2]
+    ret.orientation.x=result_q[0]
+    ret.orientation.y=result_q[1]
+    ret.orientation.z=result_q[2]
+    ret.orientation.w=result_q[3]
+    return ret
+
+def bag2path(path, frame_id, extrinsic=None):
+    print("reading bag from \"{}\"...".format(path))
+    if(os.path.isdir(path)):
+        bags=[f for f in os.listdir(path) if f.endswith('.bag')]
+        if(len(bags)!=1):
+            return None
+        bag_file=bags[0]
+        bag=rosbag.Bag(path+'/'+bag_file,'r')
+    else:
+        bag = rosbag.Bag(path, 'r')
+    odom_topic=""
+    max_messages=0
+    max_topic=""
+    for topic, topic_tuple in bag.get_type_and_topic_info()[1].items():
+        if(topic_tuple.msg_type=='nav_msgs/Odometry'):
+            if(bag.get_message_count(topic)>max_messages):
+                max_messages=bag.get_message_count(topic)
+                max_topic=topic
+    odom_topic=max_topic
+
+    T = np.identity(4)
+    if(extrinsic is not None):
+        rotation=extrinsic[0:4]
+        translation=extrinsic[4:7]
+        T=tf.transformations.quaternion_matrix(rotation)
+        T[0:3,3]=translation
+
+    path=Path()
+    for topic, msg, t in bag.read_messages(topics=odom_topic):
+        cur_pose = PoseStamped()
+        cur_pose.header.stamp=msg.header.stamp
+        cur_pose.header.frame_id=frame_id
+        cur_pose.pose=msg.pose.pose
+        
+        if(extrinsic is not None):
+            cur_pose.pose=transform_pose(T,cur_pose.pose)
+
+        path.header=cur_pose.header
+        path.poses.append(cur_pose)
+
+    print("Found {} poses in the bag. Path message built.".format(len(path.poses)))
+    
+    return path
+
+
+def load_yaml_file(file_path):
+    with open(file_path, 'r') as file:
+        return yaml.safe_load(file)
+
+def save_yaml_file(data, file_path):
+    with open(file_path, 'w') as file:
+        yaml.safe_dump(data, file, default_flow_style=False)
+
+def parse_results(result_dir, frame_id = "map"):
+    datasets = load_yaml_file(result_dir + "/datasets.yaml")
+    algorithms = load_yaml_file(result_dir + "/algorithms.yaml")
+    # with open(result_dir + "/results.json") as f:
+    #     definations = json.load(f)
+
+    print("Found {} algorithms and {} dataset with {} sequences in total".format(len(algorithms),
+        len(datasets.keys()), len([seq for dataset in datasets.values() for seq in dataset["sequences"]])))
+    
+    ret={}
+    # all algorithms
+    for algorithm in algorithms:
+        ret[algorithm] = {}
+        algorithm_dir = result_dir+'/'+algorithm
+        for dataset_name in datasets.keys():
+            ret[algorithm][dataset_name]={}
+            dataset = datasets[dataset_name]
+            dataset_dir = algorithm_dir + '/' + dataset_name
+            for sequence in dataset["sequences"]:
+                sequence_dir = dataset_dir + '/' + sequence
+                if("extrinsic" in dataset):
+                    ret[algorithm][dataset_name][sequence] = bag2path(sequence_dir, frame_id, dataset["extrinsic"])
+                else:
+                    ret[algorithm][dataset_name][sequence] = bag2path(sequence_dir, frame_id)
+    
+    # ground truth
+    gt = {}
+    for dataset_name in datasets.keys():
+        gt[dataset_name]={}
+        dataset = datasets[dataset_name]
+        gt_dir = dataset["ground_truth_folder"]
+        for sequence in dataset["sequences"]:
+            if(os.path.exists(gt_dir+"/"+sequence+".bag")):
+                gt[dataset_name][sequence] = bag2path(gt_dir+"/"+sequence+".bag", frame_id)
+            else:
+                gt[dataset_name][sequence] = bag2path(gt_dir+"/"+sequence, frame_id)
+
+    return ret, gt
+
+def finished_factor(path:Path, gt:Path):
+    path_time = path.poses[-1].header.stamp.to_sec() - path.poses[0].header.stamp.to_sec()
+    gt_time = gt.poses[-1].header.stamp.to_sec() - gt.poses[0].header.stamp.to_sec()
+    
+    if((gt_time - path_time)>5):
+        return -1
+    
+    return 1
+
+def main():
+    parser = argparse.ArgumentParser("Evaluate results of lidar odometry")
+    parser.add_argument("directory", help="directory to the results generated by the auto run script.")
+    parser.add_argument("--visualize", help="visualize the results interactively.", action="store_true")
+    parser.add_argument("--both", help="visualize the results interactively after report is generated", action="store_true")
+
+    args = parser.parse_args()
+    
+    results, gt = parse_results(args.directory)
+    if(args.visualize and not args.both):
+        from visualization import visualize
+        return visualize(results, gt)
+    else:
+        has_orientation={}
+        with open(args.directory + "/statistics.csv", 'w') as f:
+            f.write("{:>30s},{:>30s},{:>20s},{:>20s},{:>20s},{:>20s},{:>20s},{:>20s}\n".format("dataset name","sequence name","mean velocity","max velocity", "mean angular", "max angular", "total distance","total time"))
+            for dataset in gt.keys():
+                for sequence in gt[dataset].keys():
+                    max_vel, avg_vel, max_ang, avg_ang, total_dist, total_time = path_statistics(gt[dataset][sequence])
+                    if(max_ang == 0 and avg_ang == 0):
+                        has_orientation[dataset]=False
+                    f.write("{:>30s},{:>30s},{:20.3f},{:20.3f},{:20.3f},{:20.3f},{:20.3f},{:20.3f}\n".format(dataset,sequence,avg_vel,max_vel,avg_ang,max_ang,total_dist,total_time))
+
+        result_errors={}
+        for algorithm in results.keys():
+            result_errors[algorithm]={}
+            for dataset in results[algorithm].keys():
+                result_errors[algorithm][dataset]={}
+                for sequence in results[algorithm][dataset].keys():
+                    path = results[algorithm][dataset][sequence]
+                    rot, trans, trans_error = ate(path, gt[dataset][sequence], True)
+                    samples, sum_dist_error, sum_rotation_error = rpe(path, gt[dataset][sequence])
+
+                    if(len(path.poses)==0 or samples==0):
+                        result_errors[algorithm][dataset][sequence]={}
+                        result_errors[algorithm][dataset][sequence]["ate_translation"]={}
+                        result_errors[algorithm][dataset][sequence]["ate_translation"]["mean"]=-1
+                        result_errors[algorithm][dataset][sequence]["ate_translation"]["var"]=-1
+                        result_errors[algorithm][dataset][sequence]["ate_translation"]["median"]=-1
+                        result_errors[algorithm][dataset][sequence]["rpe_translation"]=-1
+                        result_errors[algorithm][dataset][sequence]["rpe_rotation"]=-1
+                        continue
+
+                    f = finished_factor(path, gt[dataset][sequence])
+
+                    result_errors[algorithm][dataset][sequence]={}
+                    result_errors[algorithm][dataset][sequence]["ate_translation"]={}
+                    result_errors[algorithm][dataset][sequence]["ate_translation"]["mean"]=np.mean(trans_error) * f
+                    result_errors[algorithm][dataset][sequence]["ate_translation"]["var"]=np.var(trans_error) * f
+                    result_errors[algorithm][dataset][sequence]["ate_translation"]["median"]=np.median(trans_error) * f
+                    result_errors[algorithm][dataset][sequence]["rpe_translation"]=sum_dist_error / samples  * f
+                    result_errors[algorithm][dataset][sequence]["rpe_rotation"]=sum_rotation_error / samples  * f
+                    if(dataset in has_orientation):
+                        result_errors[algorithm][dataset][sequence]["rpe_rotation"]=-1
+
+
+        with open(args.directory+"/ate_translation_mean.csv", 'w') as f:
+            f.write("{:>15s},{:>30s}".format("datasets", "sequences"))
+            for algorithm in results.keys():
+                f.write(",{:>30s}".format(algorithm))
+            f.write("\n")
+
+            for dataset in gt.keys():
+                for sequence in gt[dataset].keys():
+                    f.write("{:>15s},{:>30s}".format(dataset, sequence))
+                    for algorithm in results.keys():
+                        f.write(",{:30.3f}".format(result_errors[algorithm][dataset][sequence]["ate_translation"]["mean"]))
+                    f.write("\n")
+
+        with open(args.directory+"/ate_translation_var.csv", 'w') as f:
+            f.write("{:>15s},{:>30s}".format("datasets", "sequences"))
+            for algorithm in results.keys():
+                f.write(",{:>30s}".format(algorithm))
+            f.write("\n")
+
+            for dataset in gt.keys():
+                for sequence in gt[dataset].keys():
+                    f.write("{:>15s},{:>30s}".format(dataset, sequence))
+                    for algorithm in results.keys():
+                        f.write(",{:30.3f}".format(result_errors[algorithm][dataset][sequence]["ate_translation"]["var"]))
+                    f.write("\n")
+
+        with open(args.directory+"/ate_translation_median.csv", 'w') as f:
+            f.write("{:>15s},{:>30s}".format("datasets", "sequences"))
+            for algorithm in results.keys():
+                f.write(",{:>30s}".format(algorithm))
+            f.write("\n")
+
+            for dataset in gt.keys():
+                for sequence in gt[dataset].keys():
+                    f.write("{:>15s},{:>30s}".format(dataset, sequence))
+                    for algorithm in results.keys():
+                        f.write(",{:30.3f}".format(result_errors[algorithm][dataset][sequence]["ate_translation"]["median"]))
+                    f.write("\n")
+
+        with open(args.directory+"/rpe_translation.csv", 'w') as f:
+            f.write("{:>15s},{:>30s}".format("datasets", "sequences"))
+            for algorithm in results.keys():
+                f.write(",{:>30s}".format(algorithm))
+            f.write("\n")
+
+            for dataset in gt.keys():
+                for sequence in gt[dataset].keys():
+                    f.write("{:>15s},{:>30s}".format(dataset, sequence))
+                    for algorithm in results.keys():
+                        f.write(",{:30.3f}".format(result_errors[algorithm][dataset][sequence]["rpe_translation"]))
+                    f.write("\n")
+
+
+        with open(args.directory+"/rpe_rotation.csv", 'w') as f:
+            f.write("{:>15s},{:>30s}".format("datasets", "sequences"))
+            for algorithm in results.keys():
+                f.write(",{:>30s}".format(algorithm))
+            f.write("\n")
+
+            for dataset in gt.keys():
+                for sequence in gt[dataset].keys():
+                    f.write("{:>15s},{:>30s}".format(dataset, sequence))
+                    for algorithm in results.keys():
+                        f.write(",{:30.3f}".format(result_errors[algorithm][dataset][sequence]["rpe_rotation"]))
+                    f.write("\n")
+
+        if(args.both):
+            from visualization import visualize
+            return visualize(results, gt)
+
+if __name__ == '__main__':
+    main()

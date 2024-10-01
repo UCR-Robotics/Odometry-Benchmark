@@ -1,30 +1,15 @@
 # YAML configuration for algorithms used in the evaluation
-algorithm_name:
-  input_topics: # topics accepted by this algorithm (to be remapped from dataset topics)
+color_loam:
+  input_topics: # topics to remap (from dataset-provided topics)
     lidar_topic: "/velodyne_points"
-    imu_topic: "/unused"  # leave empty if not used (or any other unused topic name)
+    imu_topic: "/microstrain/imu/data"
   output_topics: # topics to record (as output results from algorithms)
     - "/odometry"
     - "/time"
-  launch_commands:  # commands to launch the algorithm, to be run in different terminals/subprocesses
-    - "roslaunch algorithm_pkg benchmark.launch"
-    - "rosrun tf static_transform_publisher 0 0 0 0 0 0 1 map odom 100"
-  cleanup_commands: # optional commands to be run when the sequence playback ends, to clean up things
-    - "cp ~/catkin_ws/src/algorithm_pkg/config/benchmark.yaml $ALG_FOLDER/params.yaml"
-  rosbag_args:      # optional arguments to be passed to rosbag play command
-    - "--clock"
-    # - "-r 0.5"
-    # - "-u 10"
-
-another_algorithm:
-  input_topics:
-    lidar_topic: "/robot1/velodyne_points"
-    imu_topic: "/imu/data"
-  output_topics:
-    - "/odometry"
-    - "/time"
   launch_commands:
-    - "roslaunch another_algorithm_pkg benchmark.launch"
+    - "roslaunch color_loam run.launch param_filename:=benchmark1"
+  cleanup_commands:
+    - "cp ~/Projects/alpaca_ws/src/color_loam/config/benchmark1.yaml $ALG_FOLDER/params.yaml"
   rosbag_args:
     # - "--clock"
     # - "-r 0.5"

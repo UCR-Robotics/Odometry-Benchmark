@@ -87,7 +87,7 @@ class OdometryBenchmark:
     for seq in dataset_config['sequences']:
       if seq == sequence_name:
         # try to match files in the ground truth folder
-        gt_file = glob.glob(f"{gt_folder}/{sequence_name}/{'*.'}{gt_type}")
+        gt_file = glob.glob(f"{gt_folder}/{sequence_name}.{gt_type}")
         if len(gt_file) == 0:
           raise ValueError(f"Ground truth file not found: {os.path.join(gt_folder, sequence_name)}.")
         print(f"Found ground truth file {gt_file[0]}")
@@ -125,7 +125,7 @@ class OdometryBenchmark:
           # Compute ATE and save results
           if 'ground_truth_extrinsics' in dataset_config: # Apply extrinsic parameters if applicable
             est_poses = self.transform_poses(est_poses, dataset_config['ground_truth_extrinsics'])
-          rot, trans, trans_error = compute_ate(est_poses, gt_poses)
+          rot, trans, trans_error = compute_ate(est_poses, gt_poses, verbose=True)
           self.ate_results[(dataset_name, sequence_name)][algorithm_name] = np.mean(trans_error)
           print(f'Processed algorithm {algorithm_name}, dataset {dataset_name}, sequence {sequence_name}')
 

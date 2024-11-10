@@ -114,6 +114,8 @@ def compute_ate(path:list, gt:list, associate_path=True, verbose=False):
     """
     if(associate_path):
         path_associated, gt_associated = associate(path, gt, verbose)
+    print("path length: {}, gt length: {}".format(len(path), len(gt)))
+    print("path_associated length: {}, gt_associated length: {}".format(len(path_associated), len(gt_associated)))
     model = np.array(path_associated)[:, 1:4].transpose()
     data = np.array(gt_associated)[:, 1:4].transpose()
     rot, trans, trans_error = align(model, data)

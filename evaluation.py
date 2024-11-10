@@ -125,7 +125,7 @@ class OdometryBenchmark:
           # Compute ATE and save results
           if 'ground_truth_extrinsics' in dataset_config: # Apply extrinsic parameters if applicable
             est_poses = self.transform_poses(est_poses, dataset_config['ground_truth_extrinsics'])
-          rot, trans, trans_error = compute_ate(est_poses, gt_poses)
+          rot, trans, trans_error = compute_ate(est_poses, gt_poses, verbose=True)
           self.ate_results[(dataset_name, sequence_name)][algorithm_name] = np.mean(trans_error)
           print(f'Processed algorithm {algorithm_name}, dataset {dataset_name}, sequence {sequence_name}')
 
